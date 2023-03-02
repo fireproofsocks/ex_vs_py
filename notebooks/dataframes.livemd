@@ -1,0 +1,255 @@
+# Explorer vs. Pandas
+
+```elixir
+# If your livebook is inside a sub directory like `lib/` or `notebooks/`:
+my_app_root = Path.join(__DIR__, "..")
+
+Mix.install(
+  [
+    {:eds, path: my_app_root, env: :dev},
+    {:kino_vega_lite, "~> 0.1.7"}
+  ],
+  config_path: Path.join(my_app_root, "config/config.exs"),
+  lockfile: Path.join(my_app_root, "mix.lock")
+)
+```
+
+## DataFrame
+
+### About
+
+A `DataFrame` is a 2-dimensional representation of data. It's one of the building blocks of data science.
+
+```elixir
+{:ok, df} = Explorer.DataFrame.from_csv("data/data.csv")
+```
+
+### Inspecting the DataFrame
+
+```elixir
+Explorer.DataFrame.dtypes(df)
+```
+
+```elixir
+# Columns
+df.names
+```
+
+```elixir
+# Number of Rows
+Explorer.DataFrame.n_rows(df)
+```
+
+```elixir
+# Getting mean values from a column
+map = Explorer.DataFrame.to_series(df)
+Explorer.Series.mean(map["Pulse"])
+```
+
+### Viewing and Selecting Data
+
+Selecting a single column looks *exactly* as it would in Pandas.
+
+```elixir
+{:ok, df} = Explorer.DataFrame.from_csv("data/data.csv")
+df["Pulse"]
+# Or, use `pull/2` to extract the series
+Explorer.DataFrame.pull(df, "Pulse")
+```
+
+```elixir
+# Select the given columns
+Explorer.DataFrame.select(df, ["Pulse", "Calories"])
+```
+
+```elixir
+Explorer.DataFrame.table(df)
+```
+
+### Use limit to simulate head
+
+In Pandas, you make frequent use of `.head()` to inspect a table. `Explorer.DataFrame` also has a `head/2` function, but if you're wanting to inspect a table, you can use `table/2` and set the `:limit` option.
+
+```elixir
+Explorer.DataFrame.table(df, limit: 7)
+```
+
+### .loc and .iloc
+
+These don't exist in `Explorer` the same way they exist in Python's Pandas.  In Pandas, a `loc` lookup will fetch any value(s) with the given *label* (there might be more than one!), whereas  `iloc` refers solely to the *integer index* (i.e. the position) in the series.
+
+What is confusing here is that a Pandas series actually maintains *2 distinct lists* for each series (!!): in addition to the list of *data*, there is also a list of "labels", which are  referred to as "indexes" (e.g. by Panda's "index" attribute).  Tricky!
+
+`Explorer.Series.at/2` operates like Pandas `iloc` in that deals with the sequential numerical index (just like its cousin `Enum.at/2`).
+
+```elixir
+s = Explorer.Series.from_list(["dog", "cat", "bird", "pig", "snake"])
+Explorer.Series.at(s, 2)
+```
+
+To achieve `.loc` functionality in Elixir, you'd have to explicitly create and maintain 2 distinct series, e.g. within a `DataFrame`.  Explicit is good, because who would have thunk a separate series of "labels" was hiding inside a regular Pandas series?
+
+Here's an example of creating a `DataFrame` with 2 series, one is the obvious data (animals), and the other is the not-so-obvious "loc" labels.
+
+```elixir
+require Explorer.DataFrame
+df = Explorer.DataFrame.new(animals: ["dog", "cat", "bird", "pig", "snake"], loc: [0, 3, 5, 3, 9])
+Explorer.DataFrame.filter(df, loc == 3)
+```
+
+```elixir
+require Explorer.DataFrame
+animals_series = Explorer.Series.from_list(["dog", "cat", "bird", "pig", "snake"])
+loc_series = Explorer.Series.from_list([0, 3, 5, 3, 9])
+df = Explorer.DataFrame.new(animals: animals_series, loc: loc_series)
+Explorer.DataFrame.filter(df, loc == 3)
+```
+
+### Filtering
+
+In Pandas, you might put some filter logic in between the square brackets, e.g.
+
+```python
+# a python DataFrame "query"
+df[ df["Pulse"] < 100 ]
+```
+
+In `Explorer`, you perform your query more explicitly.  Remember that you usually must `require Explorer.DataFrame` before constructing your query.
+
+It's important to use the `col/1` helper to wrap your column names because much of the time, the column name won't be a valid Elixir variable.  E.g. capitalized words?  Nope. Just use `col/1`.
+
+```elixir
+require Explorer.DataFrame
+{:ok, df} = Explorer.DataFrame.from_csv("data/data.csv")
+Explorer.DataFrame.filter(df, col("Pulse") < 100)
+```
+
+### Crosstab
+
+Pandas features a helpful [`crosstab`](https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.crosstab.html?highlight=crosstab#pandas.crosstab) function which computes a simple cross tabulation of two (or more) factors.
+
+Hmmmm.....
+
+<!-- livebook:{"break_markdown":true} -->
+
+### Groupby
+
+With Pandas DataFrames, you can peform an analysis on a field by grouping on another. For example, if you want to see the mean odometer value broken down by the make of car:
+
+```python
+cars.groupby(["Make"]).mean()
+```
+
+With `Explorer`, there is a `group_by/2` function, but you have to explicitly add the aggregations you want.  These are, after all, essentially "new" columns in a derivative dataframe.
+
+```elixir
+require Explorer.DataFrame
+{:ok, df} = Explorer.DataFrame.from_csv("data/car-sales.csv")
+
+df
+|> Explorer.DataFrame.group_by("Make")
+|> Explorer.DataFrame.summarise(
+  mean_doors: mean(col("Doors")),
+  mean_odometer: mean(col("Odometer (KM)"))
+)
+```
+
+## Plots and Visualizations
+
+How about visualizing your data?  Pandas offers some simple ways to graph data, e.g. produce a simple bar chart:
+
+```python
+car_sales["Odometer (KM)"].plot()
+```
+
+```elixir
+VegaLite.new(title: "Odometer")
+|> VegaLite.data_from_values(df, only: ["Odometer (KM)"])
+|> VegaLite.mark(:bar)
+|> VegaLite.encode_field(:y, "Odometer (KM)", type: :quantitative)
+```
+
+### Histogram
+
+How about a histogram?
+
+<!-- livebook:{"attrs":{"chart_title":null,"height":null,"layers":[{"chart_type":"line","color_field":null,"color_field_aggregate":null,"color_field_bin":false,"color_field_scale_scheme":null,"color_field_type":null,"data_variable":"df","x_field":"__count__","x_field_aggregate":null,"x_field_bin":false,"x_field_scale_type":null,"x_field_type":null,"y_field":"Odometer (KM)","y_field_aggregate":null,"y_field_bin":false,"y_field_scale_type":null,"y_field_type":"quantitative"}],"vl_alias":"Elixir.VegaLite","width":null},"chunks":null,"kind":"Elixir.KinoVegaLite.ChartCell","livebook_object":"smart_cell"} -->
+
+```elixir
+VegaLite.new()
+|> VegaLite.data_from_values(df, only: ["Odometer (KM)"])
+|> VegaLite.mark(:line)
+|> VegaLite.encode(:x, aggregate: :count)
+|> VegaLite.encode_field(:y, "Odometer (KM)", type: :quantitative)
+```
+
+## Mutate
+
+### Modify a column
+
+It's common for CSVs to contain strings, when you might need to represent numbers as integers. E.g. financial data might be listed as `$4,000` instead of `4000`.
+
+Here, we essentially need to do a mapping operation on all the values in a column, i.e. transform each value in a series.
+
+```elixir
+require Explorer.DataFrame
+{:ok, df} = Explorer.DataFrame.from_csv("data/car-sales.csv")
+# Explorer.DataFrame.mutate_with(df, &[c: Explorer.Series.add(&1["a"], &1["b"])]) 
+Explorer.DataFrame.mutate_with(df, fn x ->
+  [
+    {:PriceMOD,
+     Enum.map(
+       x["Price"],
+       fn p ->
+         p |> String.trim_leading("$") |> String.replace(",", "") |> Float.parse() |> elem(0)
+       end
+     )}
+  ]
+end)
+```
+
+```elixir
+{:ok, df} = Explorer.DataFrame.from_csv("data/car-sales.csv")
+
+Explorer.DataFrame.put(
+  df,
+  "Price",
+  Explorer.Series.transform(
+    df["Price"],
+    fn "$" <> n -> n |> String.replace(",", "") |> Float.parse() |> elem(0) end
+  )
+)
+```
+
+### Downcase
+
+Here's how you would convert a column to lowercase.  Note the weird requirement to reference `"Make"` (the column name) as an atom in one case and then wrapped using `col/1` in another.
+
+```elixir
+{:ok, df} = Explorer.DataFrame.from_csv("data/car-sales.csv")
+Explorer.DataFrame.mutate(df, Make: downcase(col("Make")))
+```
+
+### Missing Values
+
+There are a few ways to deal with missing values.  If you want to set them all to constants, you can provide a value to the `fill_missing/2` function:
+
+```elixir
+{:ok, df} = Explorer.DataFrame.from_csv("data/car-sales-missing-data.csv")
+df = Explorer.DataFrame.put(df, "Odometer", Explorer.Series.fill_missing(df["Odometer"], 666))
+Explorer.DataFrame.table(df, limit: :infinity)
+```
+
+Or, you can insert a calculated value, such as the mean:
+
+```elixir
+{:ok, df} = Explorer.DataFrame.from_csv("data/car-sales-missing-data.csv")
+df = Explorer.DataFrame.put(df, "Odometer", Explorer.Series.fill_missing(df["Odometer"], :mean))
+Explorer.DataFrame.table(df, limit: :infinity)
+```
+
+```elixir
+{:ok, df} = Explorer.DataFrame.from_csv("data/car-sales-missing-data.csv")
+df = Explorer.DataFrame.drop_nil(df)
+Explorer.DataFrame.table(df, limit: :infinity)
+```
