@@ -7,13 +7,13 @@ index_file = "tmp/files/index.txt"
 
 index_file
 |> File.stream!()
-|> Stream.each(fn line ->
+|> Task.async_stream(fn line ->
   path = String.trim(line)
-  {:ok, contents} = File.read(path)
+  {:ok, contents} = :prim_file.read_file(path)
   {:ok, %{"paths" => txt_paths}} = Jason.decode(contents)
 
   Enum.each(txt_paths, fn p ->
-    File.exists?(p)
+    :prim_file.read_file_info(p)
   end)
 end)
 |> Stream.run()
