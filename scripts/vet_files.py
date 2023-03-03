@@ -1,12 +1,14 @@
-# import os
+# Call this like so:
+# python scripts/vet_files.py tmp/files/index.txt
+import sys
 from os.path import exists
 import json
 from time import time
 
-index_file = "tmp/files/index.txt"
+# index_file = "tmp/files/index.txt"
 
 
-def vet_files():
+def vet_files(index_file):
     with open(index_file, 'r') as myfile:
         for line in myfile:
             open_json_file(line.rstrip())
@@ -26,7 +28,8 @@ def files_exist(paths):
 
 
 if __name__ == "__main__":
-    start_time = int(time() * 1000)
-    vet_files()
-    end_time = int(time() * 1000)
-    print(f'Duration: {end_time - start_time} ms')
+    input_file = sys.argv[1]
+    # start_time = int(time() * 1000)
+    vet_files(input_file)
+    # end_time = int(time() * 1000)
+    # print(f'Duration: {end_time - start_time} ms')

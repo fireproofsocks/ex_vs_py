@@ -21,6 +21,9 @@ defmodule Eds.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
+      {:benchee, "~> 1.1"},
+      {:jsonrs, "~> 0.2.1"},
+      # {:jiffy, "~> 1.1"},
       {:jason, "~> 1.4"},
       # {:livebook, "~> 0.8.1"},
       {:explorer, "~> 0.5.1"}
